@@ -302,30 +302,6 @@ func _get_example_balloon_path() -> String:
 	return get_script().resource_path.get_base_dir() + balloon_path
 
 
-### Dotnet bridge
-
-
-func _get_dotnet_dialogue_manager() -> Node:
-	return load(get_script().resource_path.get_base_dir() + "/DialogueManager.cs").new()
-
-
-func _bridge_get_new_instance() -> Node:
-	return new()
-
-
-func _bridge_get_next_dialogue_line(resource: DialogueResource, key: String, extra_game_states: Array = []) -> void:
-	# dotnet needs at least one await tick of the signal gets called too quickly
-	await Engine.get_main_loop().process_frame
-
-	var line = await get_next_dialogue_line(resource, key, extra_game_states)
-	bridge_get_next_dialogue_line_completed.emit(line)
-
-
-func _bridge_mutate(mutation: Dictionary, extra_game_states: Array, is_inline_mutation: bool = false) -> void:
-	await mutate(mutation, extra_game_states, is_inline_mutation)
-	bridge_mutated.emit()
-
-
 ### Helpers
 
 

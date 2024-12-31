@@ -133,9 +133,6 @@ func _apply_changes() -> void:
 
 
 func _build() -> bool:
-	# If this is the dotnet Godot then we need to check if the solution file exists
-	DialogueSettings.check_for_dotnet_solution()
-
 	# Ignore errors in other files if we are just running the test scene
 	if DialogueSettings.get_user_value("is_running_test_scene", true): return true
 
@@ -315,14 +312,13 @@ func _copy_dialogue_balloon() -> void:
 	directory_dialog.dir_selected.connect(func(path):
 		var plugin_path: String = get_plugin_path()
 
-		var is_dotnet: bool = DialogueSettings.check_for_dotnet_solution()
-		var balloon_path: String = path + ("/Balloon.tscn" if is_dotnet else "/balloon.tscn")
-		var balloon_script_path: String = path + ("/DialogueBalloon.cs" if is_dotnet else "/balloon.gd")
+		var balloon_path: String = path + "/balloon.tscn"
+		var balloon_script_path: String = path + "/balloon.gd"
 
 		# Copy the balloon scene file and change the script reference
 		var is_small_window: bool = ProjectSettings.get_setting("display/window/size/viewport_width") < 400
 		var example_balloon_file_name: String = "small_example_balloon.tscn" if is_small_window else "example_balloon.tscn"
-		var example_balloon_script_file_name: String = "ExampleBalloon.cs" if is_dotnet else "example_balloon.gd"
+		var example_balloon_script_file_name: String = "example_balloon.gd"
 		var file: FileAccess = FileAccess.open(plugin_path + "/example_balloon/" + example_balloon_file_name, FileAccess.READ)
 		var file_contents: String = file.get_as_text().replace(plugin_path + "/example_balloon/example_balloon.gd", balloon_script_path)
 		file = FileAccess.open(balloon_path, FileAccess.WRITE)
@@ -332,10 +328,7 @@ func _copy_dialogue_balloon() -> void:
 		# Copy the script file
 		file = FileAccess.open(plugin_path + "/example_balloon/" + example_balloon_script_file_name, FileAccess.READ)
 		file_contents = file.get_as_text()
-		if is_dotnet:
-			file_contents = file_contents.replace("class ExampleBalloon", "class DialogueBalloon")
-		else:
-			file_contents = file_contents.replace("class_name DialogueManagerExampleBalloon ", "")
+		file_contents = file_contents.replace("class_name DialogueManagerExampleBalloon ", "")
 		file = FileAccess.open(balloon_script_path, FileAccess.WRITE)
 		file.store_string(file_contents)
 		file.close()
