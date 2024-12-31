@@ -10,8 +10,6 @@ const ResolvedTagData = preload("./resolved_tag_data.gd")
 const DialogueManagerParseResult = preload("./parse_result.gd")
 
 
-var IMPORT_REGEX: RegEx = RegEx.create_from_string("import \"(?<path>[^\"]+)\" as (?<prefix>[a-zA-Z_\\p{Emoji_Presentation}\\p{Han}\\p{Katakana}\\p{Hiragana}\\p{Cyrillic}][a-zA-Z_0-9\\p{Emoji_Presentation}\\p{Han}\\p{Katakana}\\p{Hiragana}\\p{Cyrillic}]+)")
-var USING_REGEX: RegEx = RegEx.create_from_string("^using (?<state>.*)$")
 var VALID_TITLE_REGEX: RegEx = RegEx.create_from_string("^[a-zA-Z_0-9\\p{Emoji_Presentation}\\p{Han}\\p{Katakana}\\p{Hiragana}\\p{Cyrillic}][a-zA-Z_0-9\\p{Emoji_Presentation}\\p{Han}\\p{Katakana}\\p{Hiragana}\\p{Cyrillic}]+$")
 var BEGINS_WITH_NUMBER_REGEX: RegEx = RegEx.create_from_string("^\\d")
 var TRANSLATION_REGEX: RegEx = RegEx.create_from_string("\\[ID:(?<tr>.*?)\\]")
@@ -56,16 +54,11 @@ var raw_lines: PackedStringArray = []
 var parent_stack: Array[String] = []
 
 var parsed_lines: Dictionary = {}
-var imported_paths: PackedStringArray = []
-var using_states: PackedStringArray = []
 var titles: Dictionary = {}
 var character_names: PackedStringArray = []
 var first_title: String = ""
 var errors: Array[Dictionary] = []
 var raw_text: String = ""
-
-var _imported_line_map: Dictionary = {}
-var _imported_line_count: int = 0
 
 var while_loopbacks: Array[String] = []
 
@@ -137,17 +130,6 @@ func parse(text: String, path: String) -> Error:
 			raw_line = raw_line.replace("[ID:%s]" % translation_key, "")
 
 		# Check for each kind of line
-
-		# Start shortcuts
-		if raw_line.begins_with("using "):
-			var using_match: RegExMatch = USING_REGEX.search(raw_line)
-			if "state" in using_match.names:
-				var using_state: String = using_match.strings[using_match.names.state].strip_edges()
-				if not using_state in autoload_names:
-					add_error(id, 0, DialogueConstants.ERR_UNKNOWN_USING)
-				elif not using_state in using_states:
-					using_states.append(using_state)
-			continue
 
 		# Response
 		elif is_response_line(raw_line):
@@ -243,10 +225,10 @@ func parse(text: String, path: String) -> Error:
 		elif is_title_line(raw_line):
 			line["type"] = DialogueConstants.TYPE_TITLE
 			line["text"] = extract_title(raw_line)
-			# Titles can't have numbers as the first letter (unless they are external titles which get replaced with hashes)
-			if id >= _imported_line_count and BEGINS_WITH_NUMBER_REGEX.search(line.text):
+			# Titles can't have numbers as the first letter
+			if BEGINS_WITH_NUMBER_REGEX.search(line.text):
 				add_error(id, 2, DialogueConstants.ERR_TITLE_BEGINS_WITH_NUMBER)
-			# Only import titles are allowed to have "/" in them
+			# Titles are not allowed to have "/" in them
 			var valid_title = VALID_TITLE_REGEX.search(raw_line.replace("/", "").substr(raw_line.find("~ ") + 2).strip_edges())
 			if not valid_title:
 				add_error(id, 2, DialogueConstants.ERR_TITLE_INVALID_CHARACTERS)
@@ -325,13 +307,12 @@ func parse(text: String, path: String) -> Error:
 			doc_comments.append(raw_line.replace("##", "").strip_edges())
 			continue
 
-		elif is_line_empty(raw_line) or is_import_line(raw_line):
+		elif is_line_empty(raw_line):
 			continue
 
 		# Regular dialogue
 		else:
 			# Remove escape character
-			if raw_line.begins_with("\\using"): raw_line = raw_line.substr(1)
 			if raw_line.begins_with("\\if"): raw_line = raw_line.substr(1)
 			if raw_line.begins_with("\\elif"): raw_line = raw_line.substr(1)
 			if raw_line.begins_with("\\else"): raw_line = raw_line.substr(1)
@@ -450,7 +431,7 @@ func parse(text: String, path: String) -> Error:
 			add_error(id, 0, DialogueConstants.ERR_UNKNOWN_LINE_SYNTAX)
 
 		# If there are no titles then use the first actual line
-		if first_title == "" and  not is_import_line(raw_line):
+		if first_title == "":
 			first_title = str(id)
 
 		# If this line is the last line of a while loop, edit the id of its next line
@@ -481,8 +462,6 @@ func parse(text: String, path: String) -> Error:
 
 func get_data() -> DialogueManagerParseResult:
 	var data: DialogueManagerParseResult = DialogueManagerParseResult.new()
-	data.imported_paths = imported_paths
-	data.using_states = using_states
 	data.titles = titles
 	data.character_names = character_names
 	data.first_title = first_title
@@ -499,65 +478,15 @@ func get_errors() -> Array[Dictionary]:
 
 ## Prepare the parser by collecting all lines and titles
 func prepare(text: String, path: String, include_imported_titles_hashes: bool = true) -> void:
-	using_states = []
 	errors = []
-	imported_paths = []
-	_imported_line_map = {}
 	while_loopbacks = []
 	titles = {}
 	character_names = []
 	first_title = ""
 	raw_lines = text.split("\n")
 
-	# Work out imports
-	var known_imports: Dictionary = {}
-
-	# Include the base file path so that we can get around circular dependencies
-	known_imports[path.hash()] = "."
-
-	var imported_titles: Dictionary = {}
 	for id in range(0, raw_lines.size()):
 		var line = raw_lines[id]
-		if is_import_line(line):
-			var import_data = extract_import_path_and_name(line)
-			var import_hash: int = import_data.path.hash()
-			if import_data.size() > 0:
-				# Keep track of titles so we can add imported ones later
-				if str(import_hash) in imported_titles.keys():
-					add_error(id, 0, DialogueConstants.ERR_FILE_ALREADY_IMPORTED)
-				if import_data.prefix in imported_titles.values():
-					add_error(id, 0, DialogueConstants.ERR_DUPLICATE_IMPORT_NAME)
-				imported_titles[str(import_hash)] = import_data.prefix
-
-				# Import the file content
-				if not known_imports.has(import_hash):
-					var error: Error = import_content(import_data.path, import_data.prefix, _imported_line_map, known_imports)
-					if error != OK:
-						add_error(id, 0, error)
-
-				# Make a map so we can refer compiled lines to where they were imported from
-				if not _imported_line_map.has(import_hash):
-					_imported_line_map[import_hash] = {
-						hash = import_hash,
-						imported_on_line_number = id,
-						from_line = 0,
-						to_line = 0
-					}
-
-	var imported_content: String =  ""
-	var cummulative_line_number: int = 0
-	for item in _imported_line_map.values():
-		item["from_line"] = cummulative_line_number
-		if known_imports.has(item.hash):
-			cummulative_line_number += known_imports[item.hash].split("\n").size()
-		item["to_line"] = cummulative_line_number
-		if known_imports.has(item.hash):
-			imported_content += known_imports[item.hash] + "\n"
-
-	_imported_line_count = cummulative_line_number + 1
-
-	# Join it with the actual content
-	raw_lines = (imported_content + "\n" + text).split("\n")
 
 	# Find all titles first
 	for id in range(0, raw_lines.size()):
@@ -571,35 +500,16 @@ func prepare(text: String, path: String, include_imported_titles_hashes: bool = 
 				var next_nonempty_line_id: String = get_next_nonempty_line_id(id)
 				if next_nonempty_line_id != DialogueConstants.ID_NULL:
 					titles[title] = next_nonempty_line_id
-					if "/" in title:
-						if include_imported_titles_hashes == false:
-							titles.erase(title)
-						var bits: PackedStringArray = title.split("/")
-						if imported_titles.has(bits[0]):
-							title = imported_titles[bits[0]] + "/" + bits[1]
-							titles[title] = next_nonempty_line_id
-					elif first_title == "":
+					if first_title == "":
 						first_title = next_nonempty_line_id
 				else:
 					titles[title] = DialogueConstants.ID_ERROR_TITLE_HAS_NO_BODY
 
 
 func add_error(line_number: int, column_number: int, error: int) -> void:
-	# See if the error was in an imported file
-	for item in _imported_line_map.values():
-		if line_number < item.to_line:
-			errors.append({
-				line_number = item.imported_on_line_number,
-				column_number = 0,
-				error = DialogueConstants.ERR_ERRORS_IN_IMPORTED_FILE,
-				external_error = error,
-				external_line_number = line_number
-			})
-			return
-
 	# Otherwise, it's in this file
 	errors.append({
-		line_number = line_number - _imported_line_count,
+		line_number = line_number,
 		column_number = column_number,
 		error = error
 	})
@@ -608,15 +518,11 @@ func add_error(line_number: int, column_number: int, error: int) -> void:
 func remove_error(line_number: int, error: int) -> void:
 	for i in range(errors.size() - 1, -1, -1):
 		var err = errors[i]
-		var is_native_error = err.line_number == line_number - _imported_line_count and err.error == error
+		var is_native_error = err.line_number == line_number and err.error == error
 		var is_external_error = err.get("external_line_number") == line_number and err.get("external_error") == error
 		if is_native_error or is_external_error:
 			errors.remove_at(i)
 			return
-
-
-func is_import_line(line: String) -> bool:
-	return line.begins_with("import ") and " as " in line
 
 
 func is_title_line(line: String) -> bool:
@@ -950,96 +856,6 @@ func get_autoload_names() -> PackedStringArray:
 	return autoloads
 
 
-## Import content from another dialogue file or return an ERR
-func import_content(path: String, prefix: String, imported_line_map: Dictionary, known_imports: Dictionary) -> Error:
-	if FileAccess.file_exists(path):
-		var file = FileAccess.open(path, FileAccess.READ)
-		var content: PackedStringArray = file.get_as_text().split("\n")
-
-		var imported_titles: Dictionary = {}
-
-		for index in range(0, content.size()):
-			var line = content[index]
-			if is_import_line(line):
-				var import = extract_import_path_and_name(line)
-				if import.size() > 0:
-					if not known_imports.has(import.path.hash()):
-						# Add an empty record into the keys just so we don't end up with cyclic dependencies
-						known_imports[import.path.hash()] = ""
-						if import_content(import.path, import.prefix, imported_line_map, known_imports) != OK:
-							return ERR_LINK_FAILED
-
-					if not imported_line_map.has(import.path.hash()):
-						# Make a map so we can refer compiled lines to where they were imported from
-						imported_line_map[import.path.hash()] = {
-							hash = import.path.hash(),
-							imported_on_line_number = index,
-							from_line = 0,
-							to_line = 0
-						}
-
-					imported_titles[import.prefix] = import.path.hash()
-
-		var origin_hash: int = -1
-		for hash_value in known_imports.keys():
-			if known_imports[hash_value] == ".":
-				origin_hash = hash_value
-
-		# Replace any titles or jump points with references to the files they point to (event if they point to their own file)
-		for i in range(0, content.size()):
-			var line = content[i]
-			if is_title_line(line):
-				var title = extract_title(line)
-				if "/" in line:
-					var bits = title.split("/")
-					content[i] = "~ %s/%s" % [imported_titles[bits[0]], bits[1]]
-				else:
-					content[i] = "~ %s/%s" % [str(path.hash()), title]
-
-			elif "=>< " in line:
-				var jump: String = line.substr(line.find("=>< ") + "=>< ".length()).strip_edges()
-				if "/" in jump:
-					var bits: PackedStringArray = jump.split("/")
-					var title_hash: int = imported_titles[bits[0]]
-					if title_hash == origin_hash:
-						content[i] = "%s=>< %s" % [line.split("=>< ")[0], bits[1]]
-					else:
-						content[i] = "%s=>< %s/%s" % [line.split("=>< ")[0], title_hash, bits[1]]
-
-				elif not jump in ["END", "END!"]:
-					content[i] = "%s=>< %s/%s" % [line.split("=>< ")[0], str(path.hash()), jump]
-
-			elif "=> " in line:
-				var jump: String = line.substr(line.find("=> ") + "=> ".length()).strip_edges()
-				if "/" in jump:
-					var bits: PackedStringArray = jump.split("/")
-					var title_hash: int = imported_titles[bits[0]]
-					if title_hash == origin_hash:
-						content[i] = "%s=> %s" % [line.split("=> ")[0], bits[1]]
-					else:
-						content[i] = "%s=> %s/%s" % [line.split("=> ")[0], title_hash, bits[1]]
-
-				elif not jump in ["END", "END!"]:
-					content[i] = "%s=> %s/%s" % [line.split("=> ")[0], str(path.hash()), jump]
-
-		imported_paths.append(path)
-		known_imports[path.hash()] = "\n".join(content) + "\n=> END\n"
-		return OK
-	else:
-		return ERR_FILE_NOT_FOUND
-
-
-func extract_import_path_and_name(line: String) -> Dictionary:
-	var found: RegExMatch = IMPORT_REGEX.search(line)
-	if found:
-		return {
-			path = found.strings[found.names.path],
-			prefix = found.strings[found.names.prefix]
-		}
-	else:
-		return {}
-
-
 func extract_title(line: String) -> String:
 	return line.substr(line.find("~ ") + 2).strip_edges()
 
@@ -1200,10 +1016,7 @@ func extract_goto(line: String) -> String:
 	elif title == "END":
 		return DialogueConstants.ID_END
 
-	elif titles.has(title):
-		return titles.get(title)
-	else:
-		return DialogueConstants.ID_ERROR
+	return DialogueConstants.ID_ERROR_INVALID_TITLE
 
 
 func extract_tags(line: String) -> ResolvedTagData:

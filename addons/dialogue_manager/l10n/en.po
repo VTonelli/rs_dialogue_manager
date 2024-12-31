@@ -288,9 +288,6 @@ msgstr "File already imported."
 msgid "errors.duplicate_import"
 msgstr "Duplicate import name."
 
-msgid "errors.unknown_using"
-msgstr "Unknown autoload in using statement."
-
 msgid "errors.empty_title"
 msgstr "Titles cannot be empty."
 
@@ -307,7 +304,7 @@ msgid "errors.unknown_title"
 msgstr "Unknown title."
 
 msgid "errors.jump_to_invalid_title"
-msgstr "This jump is pointing to an invalid title."
+msgstr "This is not a valid END statement."
 
 msgid "errors.title_has_no_content"
 msgstr "That title has no content. Maybe change this to a \"=> END\"."

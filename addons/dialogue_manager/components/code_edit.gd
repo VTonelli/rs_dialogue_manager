@@ -161,18 +161,7 @@ func _request_code_completion(force: bool) -> void:
 			if matches_prompt(prompt, "end!"):
 				add_code_completion_option(CodeEdit.KIND_CLASS, "END!", "END!".substr(prompt.length()), theme_overrides.text_color, get_theme_icon("Stop", "EditorIcons"))
 
-		# Get all titles, including those in imports
-		var parser: DialogueManagerParser = DialogueManagerParser.new()
-		parser.prepare(text, main_view.current_file_path, false)
-		for title in parser.titles:
-			if "/" in title:
-				var bits = title.split("/")
-				if matches_prompt(prompt, bits[0]) or matches_prompt(prompt, bits[1]):
-					add_code_completion_option(CodeEdit.KIND_CLASS, title, title.substr(prompt.length()), theme_overrides.text_color, get_theme_icon("CombineLines", "EditorIcons"))
-			elif matches_prompt(prompt, title):
-				add_code_completion_option(CodeEdit.KIND_CLASS, title, title.substr(prompt.length()), theme_overrides.text_color, get_theme_icon("ArrowRight", "EditorIcons"))
 		update_code_completion_options(true)
-		parser.free()
 		return
 
 	var name_so_far: String = WEIGHTED_RANDOM_PREFIX.sub(current_line.strip_edges(), "")

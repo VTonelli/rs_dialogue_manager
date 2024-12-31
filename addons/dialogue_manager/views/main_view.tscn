@@ -8,7 +8,6 @@
 [ext_resource type="PackedScene" uid="uid://gr8nakpbrhby" path="res://addons/dialogue_manager/components/search_and_replace.tscn" id="6_ylh0t"]
 [ext_resource type="PackedScene" uid="uid://cs8pwrxr5vxix" path="res://addons/dialogue_manager/components/errors_panel.tscn" id="7_5cvl4"]
 [ext_resource type="Script" path="res://addons/dialogue_manager/components/code_edit_syntax_highlighter.gd" id="7_necsa"]
-[ext_resource type="PackedScene" uid="uid://cpg4lg1r3ff6m" path="res://addons/dialogue_manager/views/settings_view.tscn" id="9_8bf36"]
 [ext_resource type="PackedScene" uid="uid://0n7hwviyyly4" path="res://addons/dialogue_manager/components/find_in_files.tscn" id="10_yold3"]
 
 [sub_resource type="Image" id="Image_68x0r"]
@@ -233,21 +232,8 @@ disabled = true
 toggle_mode = true
 flat = true
 
-[node name="TestButton" type="Button" parent="Margin/Content/CodePanel/Toolbar"]
-unique_name_in_owner = true
-layout_mode = 2
-tooltip_text = "Test dialogue"
-disabled = true
-flat = true
-
 [node name="Separator3" type="VSeparator" parent="Margin/Content/CodePanel/Toolbar"]
 layout_mode = 2
-
-[node name="SettingsButton" type="Button" parent="Margin/Content/CodePanel/Toolbar"]
-unique_name_in_owner = true
-layout_mode = 2
-tooltip_text = "Settings"
-flat = true
 
 [node name="Spacer2" type="Control" parent="Margin/Content/CodePanel/Toolbar"]
 layout_mode = 2
@@ -258,15 +244,6 @@ unique_name_in_owner = true
 layout_mode = 2
 tooltip_text = "Support Dialogue Manager"
 text = "Sponsor"
-flat = true
-
-[node name="Separator4" type="VSeparator" parent="Margin/Content/CodePanel/Toolbar"]
-layout_mode = 2
-
-[node name="DocsButton" type="Button" parent="Margin/Content/CodePanel/Toolbar"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Docs"
 flat = true
 
 [node name="VersionLabel" type="Label" parent="Margin/Content/CodePanel/Toolbar"]
@@ -362,20 +339,6 @@ filters = PackedStringArray("*.csv ; Translation CSV")
 title = "Error"
 dialog_text = "You have errors in your script. Fix them and then try again."
 
-[node name="SettingsDialog" type="AcceptDialog" parent="."]
-title = "Settings"
-size = Vector2i(1000, 600)
-unresizable = true
-min_size = Vector2i(1000, 600)
-max_size = Vector2i(1000, 600)
-ok_button_text = "Done"
-
-[node name="SettingsView" parent="SettingsDialog" instance=ExtResource("9_8bf36")]
-offset_left = 8.0
-offset_top = 8.0
-offset_right = -8.0
-offset_bottom = -49.0
-
 [node name="BuildErrorDialog" type="AcceptDialog" parent="."]
 title = "Errors"
 dialog_text = "You need to fix dialogue errors before you can run your game."
@@ -418,10 +381,7 @@ code_edit = NodePath("../../Margin/Content/CodePanel/CodeEdit")
 [connection signal="id_pressed" from="Margin/Content/SidePanel/Bookmarks/FilesList/FilesPopupMenu" to="." method="_on_files_popup_menu_id_pressed"]
 [connection signal="title_selected" from="Margin/Content/SidePanel/Bookmarks/TitleList" to="." method="_on_title_list_title_selected"]
 [connection signal="toggled" from="Margin/Content/CodePanel/Toolbar/SearchButton" to="." method="_on_search_button_toggled"]
-[connection signal="pressed" from="Margin/Content/CodePanel/Toolbar/TestButton" to="." method="_on_test_button_pressed"]
-[connection signal="pressed" from="Margin/Content/CodePanel/Toolbar/SettingsButton" to="." method="_on_settings_button_pressed"]
 [connection signal="pressed" from="Margin/Content/CodePanel/Toolbar/SupportButton" to="." method="_on_support_button_pressed"]
-[connection signal="pressed" from="Margin/Content/CodePanel/Toolbar/DocsButton" to="." method="_on_docs_button_pressed"]
 [connection signal="close_requested" from="Margin/Content/CodePanel/SearchAndReplace" to="." method="_on_search_and_replace_close_requested"]
 [connection signal="open_requested" from="Margin/Content/CodePanel/SearchAndReplace" to="." method="_on_search_and_replace_open_requested"]
 [connection signal="active_title_change" from="Margin/Content/CodePanel/CodeEdit" to="." method="_on_code_edit_active_title_change"]
@@ -438,8 +398,6 @@ code_edit = NodePath("../../Margin/Content/CodePanel/CodeEdit")
 [connection signal="file_double_clicked" from="QuickOpenDialog/QuickOpenFilesList" to="." method="_on_quick_open_files_list_file_double_clicked"]
 [connection signal="file_selected" from="ExportDialog" to="." method="_on_export_dialog_file_selected"]
 [connection signal="file_selected" from="ImportDialog" to="." method="_on_import_dialog_file_selected"]
-[connection signal="confirmed" from="SettingsDialog" to="." method="_on_settings_dialog_confirmed"]
-[connection signal="script_button_pressed" from="SettingsDialog/SettingsView" to="." method="_on_settings_view_script_button_pressed"]
 [connection signal="confirmed" from="CloseConfirmationDialog" to="." method="_on_close_confirmation_dialog_confirmed"]
 [connection signal="custom_action" from="CloseConfirmationDialog" to="." method="_on_close_confirmation_dialog_custom_action"]
 [connection signal="result_selected" from="FindInFilesDialog/FindInFiles" to="." method="_on_find_in_files_result_selected"]

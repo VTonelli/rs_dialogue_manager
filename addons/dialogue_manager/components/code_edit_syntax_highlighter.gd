@@ -66,7 +66,7 @@ func _get_line_syntax_highlighting(line: int) -> Dictionary:
 	# Comments have to be removed to make the remaining processing easier.
 	# Count both end-of-line and single-line comments
 	# Comments are not allowed within dialogue lines or response lines, so we ask the parser what it thinks the current line is
-	if not (dialogue_manager_parser.is_dialogue_line(text) or dialogue_manager_parser.is_response_line(text)) or dialogue_manager_parser.is_line_empty(text) or dialogue_manager_parser.is_import_line(text):
+	if not (dialogue_manager_parser.is_dialogue_line(text) or dialogue_manager_parser.is_response_line(text)) or dialogue_manager_parser.is_line_empty(text):
 		var comment_matches: Array[RegExMatch] = regex_comments.search_all(text)
 		for comment_match in comment_matches:
 			for i in ["comment", "comment2"]:
@@ -93,21 +93,6 @@ func _get_line_syntax_highlighting(line: int) -> Dictionary:
 		var title_matches: Array[RegExMatch] = regex_titles.search_all(text)
 		for title_match in title_matches:
 			colors[title_match.get_start("title")] = {"color": text_edit.theme_overrides.titles_color}
-
-	# Import lines
-	var import_matches: Array[RegExMatch] = dialogue_manager_parser.IMPORT_REGEX.search_all(text)
-	for import_match in import_matches:
-		colors[import_match.get_start(0)] = {"color": text_edit.theme_overrides.conditions_color}
-		colors[import_match.get_start("path") - 1] = {"color": text_edit.theme_overrides.strings_color}
-		colors[import_match.get_end("path") + 1] = {"color": text_edit.theme_overrides.conditions_color}
-		colors[import_match.get_start("prefix")] = {"color": text_edit.theme_overrides.members_color}
-		colors[import_match.get_end("prefix")] = {"color": text_edit.theme_overrides.conditions_color}
-
-	# Using clauses
-	var using_matches: Array[RegExMatch] = dialogue_manager_parser.USING_REGEX.search_all(text)
-	for using_match in using_matches:
-		colors[using_match.get_start(0)] = {"color": text_edit.theme_overrides.conditions_color}
-		colors[using_match.get_start("state") - 1] = {"color": text_edit.theme_overrides.text_color}
 
 	# Condition keywords and expressions
 	var condition_matches: Array[RegExMatch] = regex_condition.search_all(text)

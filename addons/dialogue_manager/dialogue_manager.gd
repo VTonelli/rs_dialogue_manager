@@ -85,10 +85,6 @@ func _ready() -> void:
 		Engine.unregister_singleton("DialogueManager")
 	Engine.register_singleton("DialogueManager", self)
 
-	# Connect up the C# signals if need be
-	if DialogueSettings.check_for_dotnet_solution():
-		_get_dotnet_dialogue_manager().Prepare()
-
 
 ## Step through lines and run any mutations until we either hit some dialogue or the end of the conversation
 func get_next_dialogue_line(resource: DialogueResource, key: String = "", extra_game_states: Array = [], mutation_behaviour: MutationBehaviour = MutationBehaviour.Wait) -> DialogueLine:
@@ -97,14 +93,6 @@ func get_next_dialogue_line(resource: DialogueResource, key: String = "", extra_
 		assert(false, DialogueConstants.translate(&"runtime.no_resource"))
 	if resource.lines.size() == 0:
 		assert(false, DialogueConstants.translate(&"runtime.no_content").format({ file_path = resource.resource_path }))
-
-	# Inject any "using" states into the game_states
-	for state_name in resource.using_states:
-		var autoload = Engine.get_main_loop().root.get_node_or_null(state_name)
-		if autoload == null:
-			printerr(DialogueConstants.translate(&"runtime.unknown_autoload").format({ autoload = state_name }))
-		else:
-			extra_game_states = [autoload] + extra_game_states
 
 	# Get the line data
 	var dialogue: DialogueLine = await get_line(resource, key, extra_game_states)
@@ -671,6 +659,7 @@ func resolve(tokens: Array, extra_game_states: Array):
 		if token.type == DialogueConstants.TOKEN_FUNCTION:
 			var function_name: String = token.function
 			var args = await resolve_each(token.value, extra_game_states)
+			print("TOKENS: " + str(tokens))
 			if tokens[i - 1].type == DialogueConstants.TOKEN_DOT:
 				# If we are calling a deeper function then we need to collapse the
 				# value into the thing we are calling the function on
@@ -1134,10 +1123,6 @@ func thing_has_method(thing, method: String, args: Array) -> bool:
 	if thing.has_method(method):
 		return true
 
-	if method.to_snake_case() != method and DialogueSettings.check_for_dotnet_solution():
-		# If we get this far then the method might be a C# method with a Task return type
-		return _get_dotnet_dialogue_manager().ThingHasMethod(thing, method)
-
 	return false
 
 
@@ -1233,8 +1218,3 @@ func resolve_thing_method(thing, method: String, args: Array):
 				args[i] = convert(args[i], to_type)
 
 		return await thing.callv(method, args)
-
-	# If we get here then it's probably a C# method with a Task return type
-	var dotnet_dialogue_manager = _get_dotnet_dialogue_manager()
-	dotnet_dialogue_manager.ResolveThingMethod(thing, method, args)
-	return await dotnet_dialogue_manager.Resolved

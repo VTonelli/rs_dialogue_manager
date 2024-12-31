@@ -44,8 +44,6 @@ signal confirmation_closed()
 @onready var export_dialog: FileDialog = $ExportDialog
 @onready var import_dialog: FileDialog = $ImportDialog
 @onready var errors_dialog: AcceptDialog = $ErrorsDialog
-@onready var settings_dialog: AcceptDialog = $SettingsDialog
-@onready var settings_view := $SettingsDialog/SettingsView
 @onready var build_error_dialog: AcceptDialog = $BuildErrorDialog
 @onready var close_confirmation_dialog: ConfirmationDialog = $CloseConfirmationDialog
 @onready var updated_dialog: AcceptDialog = $UpdatedDialog
@@ -57,13 +55,10 @@ signal confirmation_closed()
 @onready var open_button: MenuButton = %OpenButton
 @onready var save_all_button: Button = %SaveAllButton
 @onready var find_in_files_button: Button = %FindInFilesButton
-@onready var test_button: Button = %TestButton
 @onready var search_button: Button = %SearchButton
 @onready var insert_button: MenuButton = %InsertButton
 @onready var translations_button: MenuButton = %TranslationsButton
-@onready var settings_button: Button = %SettingsButton
 @onready var support_button: Button = %SupportButton
-@onready var docs_button: Button = %DocsButton
 @onready var version_label: Label = %VersionLabel
 @onready var update_button: Button = %UpdateButton
 
@@ -84,7 +79,6 @@ var current_file_path: String = "":
 		files_list.current_file_path = current_file_path
 		if current_file_path == "" or not open_buffers.has(current_file_path):
 			save_all_button.disabled = true
-			test_button.disabled = true
 			search_button.disabled = true
 			insert_button.disabled = true
 			translations_button.disabled = true
@@ -94,7 +88,6 @@ var current_file_path: String = "":
 			code_edit.hide()
 			errors_panel.hide()
 		else:
-			test_button.disabled = false
 			search_button.disabled = false
 			insert_button.disabled = false
 			translations_button.disabled = false
@@ -203,9 +196,6 @@ func _unhandled_input(event: InputEvent) -> void:
 			"find_in_files":
 				get_viewport().set_input_as_handled()
 				_on_find_in_files_button_pressed()
-			"run_test_scene":
-				get_viewport().set_input_as_handled()
-				_on_test_button_pressed()
 
 
 func apply_changes() -> void:
@@ -393,9 +383,6 @@ func apply_theme() -> void:
 		find_in_files_button.icon = get_theme_icon("ViewportZoom", "EditorIcons")
 		find_in_files_button.tooltip_text = DialogueConstants.translate(&"find_in_files")
 
-		test_button.icon = get_theme_icon("PlayScene", "EditorIcons")
-		test_button.tooltip_text = DialogueConstants.translate(&"test_dialogue")
-
 		search_button.icon = get_theme_icon("Search", "EditorIcons")
 		search_button.tooltip_text = DialogueConstants.translate(&"search_for_text")
 
@@ -405,15 +392,9 @@ func apply_theme() -> void:
 		translations_button.icon = get_theme_icon("Translation", "EditorIcons")
 		translations_button.text = DialogueConstants.translate(&"translations")
 
-		settings_button.icon = get_theme_icon("Tools", "EditorIcons")
-		settings_button.tooltip_text = DialogueConstants.translate(&"settings")
-
 		support_button.icon = get_theme_icon("Heart", "EditorIcons")
 		support_button.text = DialogueConstants.translate(&"sponsor")
 		support_button.tooltip_text = DialogueConstants.translate(&"show_support")
-
-		docs_button.icon = get_theme_icon("Help", "EditorIcons")
-		docs_button.text = DialogueConstants.translate(&"docs")
 
 		update_button.apply_theme()
 
@@ -452,8 +433,6 @@ func apply_theme() -> void:
 		quick_open_dialog.min_size = Vector2(400, 600) * scale
 		export_dialog.min_size = Vector2(600, 500) * scale
 		import_dialog.min_size = Vector2(600, 500) * scale
-		settings_dialog.min_size = Vector2(1000, 600) * scale
-		settings_dialog.max_size = Vector2(1000, 600) * scale
 		find_in_files_dialog.min_size = Vector2(800, 600) * scale
 
 
@@ -884,7 +863,7 @@ func _on_insert_button_menu_id_pressed(id: int) -> void:
 		10:
 			code_edit.insert_text_at_cursor("Nathan: [[Hi|Hello|Howdy]]")
 		11:
-			code_edit.insert_text_at_cursor("=> title")
+			code_edit.insert_text_at_cursor("do jump_to(\"title\")")
 		12:
 			code_edit.insert_text_at_cursor("=> END")
 
@@ -1040,42 +1019,8 @@ func _on_search_and_replace_close_requested() -> void:
 	code_edit.grab_focus()
 
 
-func _on_settings_button_pressed() -> void:
-	settings_view.prepare()
-	settings_dialog.popup_centered()
-
-
-func _on_settings_view_script_button_pressed(path: String) -> void:
-	settings_dialog.hide()
-	plugin.get_editor_interface().edit_resource(load(path))
-
-
-func _on_test_button_pressed() -> void:
-	save_file(current_file_path)
-
-	if errors_panel.errors.size() > 0:
-		errors_dialog.popup_centered()
-		return
-
-	DialogueSettings.set_user_value("is_running_test_scene", true)
-	DialogueSettings.set_user_value("run_resource_path", current_file_path)
-	var test_scene_path: String = DialogueSettings.get_setting("custom_test_scene_path", "res://addons/dialogue_manager/test_scene.tscn")
-	plugin.get_editor_interface().play_custom_scene(test_scene_path)
-
-
-func _on_settings_dialog_confirmed() -> void:
-	settings_view.apply_settings_changes()
-	parse()
-	code_edit.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY if DialogueSettings.get_setting("wrap_lines", false) else TextEdit.LINE_WRAPPING_NONE
-	code_edit.grab_focus()
-
-
 func _on_support_button_pressed() -> void:
 	OS.shell_open("https://patreon.com/nathanhoad")
-
-
-func _on_docs_button_pressed() -> void:
-	OS.shell_open("https://github.com/nathanhoad/godot_dialogue_manager")
 
 
 func _on_files_list_file_popup_menu_requested(at_position: Vector2) -> void:
