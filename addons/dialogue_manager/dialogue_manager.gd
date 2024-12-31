@@ -91,7 +91,7 @@ func _ready() -> void:
 
 
 ## Step through lines and run any mutations until we either hit some dialogue or the end of the conversation
-func get_next_dialogue_line(resource: DialogueResource, key: String = "", extra_game_states: Array = [], mutation_behaviour: MutationBehaviour = MutationBehaviour.Wait, single_step: bool = false) -> DialogueLine:
+func get_next_dialogue_line(resource: DialogueResource, key: String = "", extra_game_states: Array = [], mutation_behaviour: MutationBehaviour = MutationBehaviour.Wait) -> DialogueLine:
 	# You have to provide a valid dialogue resource
 	if resource == null:
 		assert(false, DialogueConstants.translate(&"runtime.no_resource"))
@@ -129,10 +129,7 @@ func get_next_dialogue_line(resource: DialogueResource, key: String = "", extra_
 			(func(): dialogue_ended.emit(resource)).call_deferred()
 			return null
 		else:
-			if single_step:
-				return dialogue
-			else:
-				return await get_next_dialogue_line(resource, dialogue.next_id, extra_game_states, mutation_behaviour)
+			return await get_next_dialogue_line(resource, dialogue.next_id, extra_game_states, mutation_behaviour)
 	else:
 		got_dialogue.emit(dialogue)
 		return dialogue
@@ -316,11 +313,11 @@ func _bridge_get_new_instance() -> Node:
 	return new()
 
 
-func _bridge_get_next_dialogue_line(resource: DialogueResource, key: String, extra_game_states: Array = [], mutation_behaviour: String = "Wait", single_step: bool = false) -> void:
+func _bridge_get_next_dialogue_line(resource: DialogueResource, key: String, extra_game_states: Array = []) -> void:
 	# dotnet needs at least one await tick of the signal gets called too quickly
 	await Engine.get_main_loop().process_frame
 
-	var line = await get_next_dialogue_line(resource, key, extra_game_states, MutationBehaviour[mutation_behaviour], single_step)
+	var line = await get_next_dialogue_line(resource, key, extra_game_states)
 	bridge_get_next_dialogue_line_completed.emit(line)
 
 
@@ -581,33 +578,13 @@ func check_condition(data: Dictionary, extra_game_states: Array) -> bool:
 # Make a change to game state or run a method
 func mutate(mutation: Dictionary, extra_game_states: Array, is_inline_mutation: bool = false) -> void:
 	var expression: Array[Dictionary] = mutation.expression
-
-	# Handle built in mutations
-	if expression[0].type == DialogueConstants.TOKEN_FUNCTION and expression[0].function in [&"wait", &"debug"]:
-		var args: Array = await resolve_each(expression[0].value, extra_game_states)
-		match expression[0].function:
-			&"wait":
-				mutated.emit(mutation)
-				await Engine.get_main_loop().create_timer(float(args[0])).timeout
-				return
-
-			&"debug":
-				prints("Debug:", args)
-				await Engine.get_main_loop().process_frame
-
-	# Or pass through to the resolver
+	
+	mutated.emit(mutation)
+	if mutation.get("is_blocking", true):
+		await resolve(mutation.expression.duplicate(true), extra_game_states)
 	else:
-		if not mutation_contains_assignment(mutation.expression) and not is_inline_mutation:
-			mutated.emit(mutation)
-
-		if mutation.get("is_blocking", true):
-			await resolve(mutation.expression.duplicate(true), extra_game_states)
-			return
-		else:
-			resolve(mutation.expression.duplicate(true), extra_game_states)
-
-	# Wait one frame to give the dialogue handler a chance to yield
-	await Engine.get_main_loop().process_frame
+		resolve(mutation.expression.duplicate(true), extra_game_states)
+		await Engine.get_main_loop().process_frame
 
 
 func mutation_contains_assignment(mutation: Array) -> bool:
@@ -724,7 +701,7 @@ func resolve(tokens: Array, extra_game_states: Array):
 				var caller: Dictionary = tokens[i - 2]
 				if Builtins.is_supported(caller.value):
 					caller["type"] = "value"
-					caller["value"] = Builtins.resolve_method(caller.value, function_name, args)
+					caller["value"] = await Builtins.resolve_method(caller.value, function_name, args)
 					tokens.remove_at(i)
 					tokens.remove_at(i-1)
 					i -= 2
@@ -1248,7 +1225,7 @@ func get_method_info_for(thing, method: String) -> Dictionary:
 
 func resolve_thing_method(thing, method: String, args: Array):
 	if Builtins.is_supported(thing):
-		var result = Builtins.resolve_method(thing, method, args)
+		var result = await Builtins.resolve_method(thing, method, args)
 		if not Builtins.has_resolve_method_failed():
 			return result
 
