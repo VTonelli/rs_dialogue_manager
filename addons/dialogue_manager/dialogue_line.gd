@@ -29,23 +29,14 @@ var text_replacements: Array[Dictionary] = []
 ## The key to use for translating this line.
 var translation_key: String = ""
 
-## A map for when and for how long to pause while typing out the dialogue text.
-var pauses: Dictionary = {}
-
-## A map for speed changes when typing out the dialogue text.
-var speeds: Dictionary = {}
-
-## A map of any mutations to run while typing out the dialogue text.
-var inline_mutations: Array[Array] = []
+## A map for bbcodes
+var bbcodes: Array = []
 
 ## A list of responses attached to this line of dialogue.
 var responses: Array = []
 
 ## A list of any extra game states to check when resolving variables and mutations.
 var extra_game_states: Array = []
-
-## How long to show this line before advancing to the next. Either a float (of seconds), [code]"auto"[/code], or [code]null[/code].
-var time: String = ""
 
 ## Any #tags that were included in the line
 var tags: PackedStringArray = []
@@ -71,10 +62,7 @@ func _init(data: Dictionary = {}) -> void:
 				text = data.text
 				text_replacements = data.get("text_replacements", [] as Array[Dictionary])
 				translation_key = data.get("translation_key", data.text)
-				pauses = data.get("pauses", {})
-				speeds = data.get("speeds", {})
-				inline_mutations = data.get("inline_mutations", [] as Array[Array])
-				time = data.get("time", "")
+				bbcodes = data.get("bbcodes", [])
 				tags = data.get("tags", [])
 
 			_DialogueConstants.TYPE_MUTATION:

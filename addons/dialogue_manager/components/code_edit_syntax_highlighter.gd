@@ -18,7 +18,7 @@ var regex_wcondition: RegEx = RegEx.create_from_string("\\[if (?<condition>((?:[
 var regex_wendif: RegEx = RegEx.create_from_string("\\[(\\/if|else)\\]")
 var regex_rgroup: RegEx = RegEx.create_from_string("\\[\\[(?<options>.*?)\\]\\]")
 var regex_endconditions: RegEx = RegEx.create_from_string("^\\s*(endif|else):?\\s*$")
-var regex_tags: RegEx = RegEx.create_from_string("\\[(?<tag>(?!(?:ID:.*)|if)[a-zA-Z_][a-zA-Z0-9_]*!?)(?:[= ](?<val>[^\\[\\]]+))?\\](?:(?<text>(?!\\[\\/\\k<tag>\\]).*?)?(?<end>\\[\\/\\k<tag>\\]))?")
+var regex_tags: RegEx = RegEx.create_from_string("\\[(?<tag>(?!(?:ID:.*))[a-zA-Z_][a-zA-Z0-9_]*!?)(?:[= ](?<val>[^\\[\\]]+))?\\](?:(?<text>(?!\\[\\/\\k<tag>\\]).*?)?(?<end>\\[\\/\\k<tag>\\]))?")
 var regex_dialogue: RegEx = RegEx.create_from_string("^\\s*(?:(?<random>\\%[\\d.]* )|(?<response>- ))?(?:(?<character>[^#:]*): )?(?<dialogue>.*)$")
 var regex_goto: RegEx = RegEx.create_from_string("=><? (?:(?<file>[^\\/]+)\\/)?(?<title>[^\\/]*)")
 var regex_string: RegEx = RegEx.create_from_string("^&?(?<delimiter>[\"'])(?<content>(?:\\\\{2})*|(?:.*?[^\\\\](?:\\\\{2})*))\\1$")
@@ -181,6 +181,7 @@ func _get_dialogue_syntax_highlighting(start_index: int, text: String) -> Dictio
 		colors[start_index + goto_match.get_end(0)] = {"color": text_edit.theme_overrides.text_color}
 
 	# Wrapped condition
+	'''
 	var wcondition_matches: Array[RegExMatch] = regex_wcondition.search_all(text)
 	for wcondition_match in wcondition_matches:
 		colors[start_index + wcondition_match.get_start(0)] = {"color": text_edit.theme_overrides.symbols_color}
@@ -196,7 +197,8 @@ func _get_dialogue_syntax_highlighting(start_index: int, text: String) -> Dictio
 		colors[start_index + wendif_match.get_start(1)] = {"color": text_edit.theme_overrides.conditions_color}
 		colors[start_index + wendif_match.get_end(1)] = {"color": text_edit.theme_overrides.symbols_color}
 		colors[start_index + wendif_match.get_end(0)] = {"color": text_edit.theme_overrides.text_color}
-
+	'''
+	
 	# Random groups
 	var rgroup_matches: Array[RegExMatch] = regex_rgroup.search_all(text)
 	for rgroup_match in rgroup_matches:
@@ -216,7 +218,6 @@ func _get_dialogue_syntax_highlighting(start_index: int, text: String) -> Dictio
 func _get_expression_syntax_highlighting(start_index: int, type: ExpressionType, text: String) -> Dictionary:
 	var text_edit: TextEdit = get_text_edit()
 	var colors: Dictionary = {}
-
 	if type == ExpressionType.SET:
 		var assignment_matches: Array[RegExMatch] = regex_assignment.search_all(text)
 		for assignment_match in assignment_matches:

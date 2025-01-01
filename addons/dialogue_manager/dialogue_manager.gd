@@ -10,7 +10,9 @@ const DialogueResponse = preload("./dialogue_response.gd")
 const DialogueManagerParser = preload("./components/parser.gd")
 const DialogueManagerParseResult = preload("./components/parse_result.gd")
 const ResolvedLineData = preload("./components/resolved_line_data.gd")
+const ParseInjections = preload("./components/parse_injections.gd")
 
+const LOCALS_PREFIX = &'__locals'
 
 ## Emitted when a title is encountered while traversing dialogue, usually when jumping from a
 ## goto line
@@ -117,7 +119,7 @@ func get_next_dialogue_line(resource: DialogueResource, key: String = "", extra_
 			(func(): dialogue_ended.emit(resource)).call_deferred()
 			return null
 		else:
-			return await get_next_dialogue_line(resource, dialogue.next_id, extra_game_states, mutation_behaviour)
+			return dialogue
 	else:
 		got_dialogue.emit(dialogue)
 		return dialogue
@@ -139,60 +141,7 @@ func get_resolved_line_data(data: Dictionary, extra_game_states: Array = []) -> 
 	for found in parser.INLINE_RANDOM_REGEX.search_all(text):
 		var options = found.get_string(&"options").split(&"|")
 		text = text.replace(&"[[%s]]" % found.get_string(&"options"), options[randi_range(0, options.size() - 1)])
-
-	# Do a pass on the markers to find any conditionals
 	var markers: ResolvedLineData = parser.extract_markers(text)
-
-	# Resolve any conditionals and update marker positions as needed
-	if data.type == DialogueConstants.TYPE_DIALOGUE:
-		var resolved_text: String = markers.text
-		var conditionals: Array[RegExMatch] = parser.INLINE_CONDITIONALS_REGEX.search_all(resolved_text)
-		var replacements: Array = []
-		for conditional in conditionals:
-			var condition_raw: String = conditional.strings[conditional.names.condition]
-			var body: String = conditional.strings[conditional.names.body]
-			var body_else: String = ""
-			if &"[else]" in body:
-				var bits = body.split(&"[else]")
-				body = bits[0]
-				body_else = bits[1]
-			var condition: Dictionary = parser.extract_condition("if " + condition_raw, false, 0)
-			# If the condition fails then use the else of ""
-			if not await check_condition({ condition = condition }, extra_game_states):
-				body = body_else
-			replacements.append({
-				start = conditional.get_start(),
-				end = conditional.get_end(),
-				string = conditional.get_string(),
-				body = body
-			})
-
-		for i in range(replacements.size() -1, -1, -1):
-			var r: Dictionary = replacements[i]
-			resolved_text = resolved_text.substr(0, r.start) + r.body + resolved_text.substr(r.end, 9999)
-			# Move any other markers now that the text has changed
-			var offset: int = r.end - r.start - r.body.length()
-			for key in [&"pauses", &"speeds", &"time"]:
-				if markers.get(key) == null: continue
-				var marker = markers.get(key)
-				var next_marker: Dictionary = {}
-				for index in marker:
-					if index < r.start:
-						next_marker[index] = marker[index]
-					elif index > r.start:
-						next_marker[index - offset] = marker[index]
-				markers.set(key, next_marker)
-			var mutations: Array[Array] = markers.mutations
-			var next_mutations: Array[Array] = []
-			for mutation in mutations:
-				var index = mutation[0]
-				if index < r.start:
-					next_mutations.append(mutation)
-				elif index > r.start:
-					next_mutations.append([index - offset, mutation[1]])
-			markers.mutations = next_mutations
-
-		markers.text = resolved_text
 
 	parser.free()
 
@@ -458,10 +407,7 @@ func create_dialogue_line(data: Dictionary, extra_game_states: Array) -> Dialogu
 				text = resolved_data.text,
 				text_replacements = data.text_replacements,
 				translation_key = data.translation_key,
-				pauses = resolved_data.pauses,
-				speeds = resolved_data.speeds,
-				inline_mutations = resolved_data.mutations,
-				time = resolved_data.time,
+				bbcodes = resolved_data.bbcodes,
 				tags = data.get(&"tags", []),
 				extra_game_states = extra_game_states
 			})
@@ -579,6 +525,11 @@ func get_responses(ids: Array, resource: DialogueResource, id_trail: String, ext
 	return responses
 
 
+static func void_as_nil(value: Variant):
+	if value is Void:
+		return null
+	return value
+
 # Get a value on the current scene or game state
 func get_state_value(property: String, extra_game_states: Array):
 	# Special case for static primitive calls
@@ -600,11 +551,11 @@ func get_state_value(property: String, extra_game_states: Array):
 	for state in get_game_states(extra_game_states):
 		if typeof(state) == TYPE_DICTIONARY:
 			if state.has(property):
-				return state.get(property)
+				return void_as_nil(state.get(property))
 		else:
 			var result = expression.execute([], state, false)
 			if not expression.has_execute_failed():
-				return result
+				return void_as_nil(result)
 
 	if include_singletons and Engine.has_singleton(property):
 		return Engine.get_singleton(property)
@@ -649,17 +600,45 @@ func resolve(tokens: Array, extra_game_states: Array):
 			token["type"] = "value"
 			token["value"] = await resolve(token.value, extra_game_states)
 
-	# Then variables/methods
+	for token in tokens:
+		if &"value" in token and typeof(token.value) in [TYPE_STRING, TYPE_STRING_NAME] and token.value == LOCALS_PREFIX:
+			assert(false, DialogueConstants.translate(&"runtime.invalid_locals_access"))
+		if &"function" in token and token.function == LOCALS_PREFIX:
+			assert(false, DialogueConstants.translate(&"runtime.invalid_locals_access"))
+			
+	# Then handle injections
 	var i: int = 0
 	var limit: int = 0
 	while i < tokens.size() and limit < 1000:
 		limit += 1
 		var token: Dictionary = tokens[i]
+		if token.type == DialogueConstants.TOKEN_FUNCTION:
+			if not token.get(&"injected"):
+				i = ParseInjections.inject_call_for_functions(tokens, i)
+		elif token.type == DialogueConstants.TOKEN_ASSIGNMENT:
+			var lhs: Dictionary = tokens[i - 1]
+			var llhs = null
+			if i - 2 > 0:
+				llhs = tokens[i - 2]
+			if lhs.type == &"variable" and not lhs.get(&"injected") and (not llhs or llhs.type != DialogueConstants.TOKEN_DOT):
+				i = ParseInjections.inject_locals_for_assignment(tokens, i-1)
+		i += 1
+	if limit >= 1000:
+		assert(false, DialogueConstants.translate(&"runtime.something_went_wrong"))
 
+	for token in tokens:
+		if token.has(&"injected"):
+			token.erase(&"injected")
+
+	# Then variables/methods
+	i = 0
+	limit = 0
+	while i < tokens.size() and limit < 1000:
+		limit += 1
+		var token: Dictionary = tokens[i]
 		if token.type == DialogueConstants.TOKEN_FUNCTION:
 			var function_name: String = token.function
 			var args = await resolve_each(token.value, extra_game_states)
-			print("TOKENS: " + str(tokens))
 			if tokens[i - 1].type == DialogueConstants.TOKEN_DOT:
 				# If we are calling a deeper function then we need to collapse the
 				# value into the thing we are calling the function on
@@ -713,16 +692,6 @@ func resolve(tokens: Array, extra_game_states: Array):
 						token["type"] = "value"
 						token["value"] = Quaternion(args[0], args[1], args[2], args[3])
 						found = true
-					&"Callable":
-						token["type"] = "value"
-						match args.size():
-							0:
-								token["value"] = Callable()
-							1:
-								token["value"] = Callable(args[0])
-							2:
-								token["value"] = Callable(args[0], args[1])
-						found = true
 					&"Color":
 						token["type"] = "value"
 						match args.size():
@@ -736,14 +705,6 @@ func resolve(tokens: Array, extra_game_states: Array):
 								token["value"] = Color(args[0], args[1], args[2])
 							4:
 								token["value"] = Color(args[0], args[1], args[2], args[3])
-						found = true
-					&"load":
-						token["type"] = "value"
-						token["value"] = load(args[0])
-						found = true
-					&"emit":
-						token["type"] = "value"
-						token["value"] = resolve_signal(args, extra_game_states)
 						found = true
 					_:
 						for state in get_game_states(extra_game_states):
@@ -985,7 +946,6 @@ func resolve(tokens: Array, extra_game_states: Array):
 		if token.type == DialogueConstants.TOKEN_ASSIGNMENT:
 			var lhs: Dictionary = tokens[i - 1]
 			var value
-
 			match lhs.type:
 				&"variable":
 					value = apply_operation(token.value, get_state_value(lhs.value, extra_game_states), tokens[i+1].value)
@@ -1139,37 +1099,6 @@ func thing_has_property(thing: Object, property: String) -> bool:
 			return true
 
 	return false
-
-
-func resolve_signal(args: Array, extra_game_states: Array):
-	if args[0] is Signal:
-		args[0] = args[0].get_name()
-
-	for state in get_game_states(extra_game_states):
-		if typeof(state) == TYPE_DICTIONARY:
-			continue
-		elif state.has_signal(args[0]):
-			match args.size():
-				1:
-					state.emit_signal(args[0])
-				2:
-					state.emit_signal(args[0], args[1])
-				3:
-					state.emit_signal(args[0], args[1], args[2])
-				4:
-					state.emit_signal(args[0], args[1], args[2], args[3])
-				5:
-					state.emit_signal(args[0], args[1], args[2], args[3], args[4])
-				6:
-					state.emit_signal(args[0], args[1], args[2], args[3], args[4], args[5])
-				7:
-					state.emit_signal(args[0], args[1], args[2], args[3], args[4], args[5], args[6])
-				8:
-					state.emit_signal(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7])
-			return
-
-	# The signal hasn't been found anywhere
-	show_error_for_missing_state_value(DialogueConstants.translate(&"runtime.signal_not_found").format({ signal_name = args[0], states = _get_state_shortcut_names(extra_game_states) }))
 
 
 func get_method_info_for(thing, method: String) -> Dictionary:

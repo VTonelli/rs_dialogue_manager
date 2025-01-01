@@ -304,7 +304,7 @@ msgid "errors.unknown_title"
 msgstr "Unknown title."
 
 msgid "errors.jump_to_invalid_title"
-msgstr "This is not a valid END statement."
+msgstr "Not a valid END statement."
 
 msgid "errors.title_has_no_content"
 msgstr "That title has no content. Maybe change this to a \"=> END\"."
@@ -467,6 +467,9 @@ msgstr "\"{autoload}\" doesn't appear to be a valid autoload."
 
 msgid "runtime.something_went_wrong"
 msgstr "Something went wrong."
+
+msgid "runtime.invalid_locals_access"
+msgstr "__locals is a reserved variable name."
 
 msgid "runtime.expected_n_got_n_args"
 msgstr "\"{method}\" was called with {received} arguments but it only has {expected}."
